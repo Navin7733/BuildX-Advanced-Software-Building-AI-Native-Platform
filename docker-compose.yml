@@ -1,0 +1,145 @@
+version: '3.9'
+
+services:
+  # ─── MongoDB ────────────────────────────────────────────────
+  mongo:
+    image: mongo:7.0
+    container_name: buildx_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: buildx
+    networks:
+      - buildx_net
+
+  # ─── Redis ──────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: buildx_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - buildx_net
+
+  # ─── Django Backend ─────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: buildx_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/buildx
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    volumes:
+      - ./backend:/app
+      - projects_data:/projects
+    depends_on:
+      - mongo
+      - redis
+    networks:
+      - buildx_net
+    command: >
+      sh -c "python manage.py migrate --run-syncdb &&
+             uvicorn buildx.asgi:application --host 0.0.0.0 --port 8000 --reload"
+
+  # ─── Celery Worker ──────────────────────────────────────────
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: buildx_celery_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/buildx
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    volumes:
+      - ./backend:/app
+      - projects_data:/projects
+    depends_on:
+      - mongo
+      - redis
+      - backend
+    networks:
+      - buildx_net
+    command: celery -A buildx worker -l info -Q default,planner,architect,frontend,backend_dev,reviewer,testing,documentation,deployment,memory --concurrency=4
+
+  # ─── Celery Beat (scheduler) ────────────────────────────────
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: buildx_celery_beat
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/buildx
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - redis
+    networks:
+      - buildx_net
+    command: celery -A buildx beat -l info
+
+  # ─── Flower (Celery Monitor) ─────────────────────────────────
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: buildx_flower
+    restart: unless-stopped
+    ports:
+      - "5555:5555"
+    env_file:
+      - .env
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+    depends_on:
+      - redis
+    networks:
+      - buildx_net
+    command: celery -A buildx flower --port=5555
+
+  # ─── React Frontend ──────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: buildx_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - buildx_net
+
+volumes:
+  mongo_data:
+  redis_data:
+  projects_data:
+
+networks:
+  buildx_net:
+    driver: bridge
