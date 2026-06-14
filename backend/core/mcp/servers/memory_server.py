@@ -71,23 +71,55 @@ class MemoryMCPServer:
         return {'status': 'success', 'memory_id': memory_id}
 
     def search_memories(self, query: str, top_k: int = 5) -> list[dict]:
-        """Semantic search over project memories."""
-        # MVP stub: fallback to text search if Atlas vector search isn't ready
-        # Real implementation would call SemanticMemory(self.project_id).search(query)
-        docs = db.memories().find({
-            'project_id': self.project_id,
-            '$text': {'$search': query}
-        }).limit(top_k)
-        
-        results = list(docs)
+        """Text/semantic search over project memories."""
+        results = []
+        try:
+            # Try text-index search first
+            results = list(db.memories().find({
+                'project_id': self.project_id,
+                '$text': {'$search': query}
+            }, {'score': {'$meta': 'textScore'}}).sort([('score', {'$meta': 'textScore'})]).limit(top_k))
+        except Exception:
+            pass
+
         if not results:
-            # Fallback to returning recent memories if no text index exists
-            results = list(db.memories().find({'project_id': self.project_id}).sort('created_at', -1).limit(top_k))
-            
+            # Fallback: simple regex search across title and content
+            import re
+            pattern = re.compile(re.escape(query), re.IGNORECASE)
+            results = list(db.memories().find({
+                'project_id': self.project_id,
+                '$or': [{'title': pattern}, {'content': pattern}]
+            }).limit(top_k))
+
+        if not results:
+            # Last resort: return the most recent memories
+            results = list(
+                db.memories()
+                .find({'project_id': self.project_id})
+                .sort('created_at', -1)
+                .limit(top_k)
+            )
+
         return [{
             'id': str(d['_id']),
             'type': d['type'],
             'title': d.get('title'),
             'content': d['content'],
-            'created_at': d['created_at'].isoformat()
+            'created_at': d['created_at'].isoformat(),
         } for d in results]
+
+    def search_similar(self, query: str, top_k: int = 5) -> list[dict]:
+        """
+        Vector-similarity search over project memories.
+        Falls back to search_memories if Atlas vector search isn't configured.
+        """
+        try:
+            from core.memory.semantic import SemanticMemory
+            semantic = SemanticMemory(self.project_id)
+            vector_results = semantic.search(query, top_k=top_k)
+            if vector_results:
+                return vector_results
+        except Exception as e:
+            logger.warning(f"Vector search unavailable, falling back to text search: {e}")
+
+        return self.search_memories(query, top_k=top_k)

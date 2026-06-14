@@ -7,8 +7,7 @@ import { Activity, Database, FileCode2, Play, Users, GitBranch, TerminalSquare, 
 const ProjectPage = () => {
   const { projectId } = useParams();
   const [project, setProject] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const setActiveProject = useStore(state => state.setActiveProject);
+  const [runs, setRuns] = useState([]);
 
   useEffect(() => {
     const loadProject = async () => {
@@ -16,6 +15,14 @@ const ProjectPage = () => {
         const res = await projectApi.get(projectId);
         setProject(res.data);
         setActiveProject(res.data);
+        
+        // Also load recent agent runs
+        try {
+          const runsRes = await agentApi.listRuns(projectId);
+          setRuns(runsRes.data);
+        } catch (err) {
+          console.error("Failed to load runs", err);
+        }
       } catch (error) {
         console.error("Failed to load project details", error);
       } finally {
@@ -105,6 +112,49 @@ const ProjectPage = () => {
           </div>
           <p className="text-slate-400 text-sm">Review architectural decisions, knowledge graph, and past project context.</p>
         </Link>
+      </div>
+      
+      {/* Recent Agent Runs */}
+      <div className="glass-panel p-6 rounded-xl border border-slate-700/50 mt-8">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <Activity size={18} className="text-violet-400" />
+          Recent Agent Activity
+        </h3>
+        {runs.length === 0 ? (
+          <p className="text-slate-400 text-sm italic">No agents have been run for this project yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-300">
+              <thead className="text-xs uppercase bg-slate-800/50 text-slate-400">
+                <tr>
+                  <th className="px-4 py-3 rounded-tl-lg">Agent</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Duration</th>
+                  <th className="px-4 py-3">Tokens</th>
+                  <th className="px-4 py-3 rounded-tr-lg">Time</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/50">
+                {runs.slice(0, 10).map((run) => (
+                  <tr key={run.id} className="hover:bg-slate-800/30 transition-colors">
+                    <td className="px-4 py-3 font-medium text-slate-200 capitalize flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${run.status === 'completed' ? 'bg-emerald-500' : run.status === 'failed' ? 'bg-red-500' : 'bg-violet-500 animate-pulse'}`} />
+                      {run.agent_type.replace('_', ' ')}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded text-xs ${run.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : run.status === 'failed' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-violet-500/10 text-violet-400 border border-violet-500/20'}`}>
+                        {run.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">{run.duration}s</td>
+                    <td className="px-4 py-3 text-slate-400">{run.tokens_used.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-slate-500">{new Date(run.created_at).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

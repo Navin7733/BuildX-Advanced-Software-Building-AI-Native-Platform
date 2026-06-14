@@ -13,13 +13,11 @@ logger = logging.getLogger(__name__)
 class DatabaseMCPServer:
     def __init__(self, project_id: str):
         self.project_id = project_id
-        # In a real implementation, this would connect to a dynamically
-        # provisioned per-project database or collection prefix.
-        # For MVP, we'll prefix collections with project_id.
+        # Isolate collections by prefixing with project_id
         self.prefix = f"proj_{project_id}_"
 
     def get_collection(self, name: str):
-        return db.get_collection(f"{self.prefix}{name}")
+        return db.get_db()[f"{self.prefix}{name}"]
 
     def validate_schema(self, collection_name: str, schema: dict) -> dict:
         """
@@ -69,6 +67,8 @@ class DatabaseMCPServer:
             
         try:
             col = self.get_collection(collection_name)
+            # Clear collection before seeding for clean slate tests
+            col.delete_many({})
             result = col.insert_many(documents)
             return {
                 'status': 'success', 

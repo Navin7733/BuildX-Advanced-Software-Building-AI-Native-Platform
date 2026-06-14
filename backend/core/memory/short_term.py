@@ -35,7 +35,13 @@ class ShortTermMemory:
         self.redis.rpush(full_key, json.dumps(value))
         self.redis.expire(full_key, self.ttl)
         
+    def append_list(self, list_key: str, value: dict):
+        return self.append_to_list(list_key, value)
+        
     def get_list(self, list_key: str) -> list[dict]:
         full_key = f"{self.prefix}{list_key}"
         items = self.redis.lrange(full_key, 0, -1)
         return [json.loads(item) for item in items]
+
+    def delete(self, key: str):
+        self.redis.delete(f"{self.prefix}{key}")

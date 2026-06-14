@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
-import { Send, Play, Terminal, Bot, Code2, Loader2, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Send, Play, Terminal, Bot, Code2, Loader2, RefreshCw, CheckCircle2, Trash2 } from 'lucide-react';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { agentApi, projectApi } from '../services/api';
 
@@ -14,7 +14,7 @@ const AgentWorkspacePage = () => {
   const [files, setFiles] = useState([]);
   const [isDeploying, setIsDeploying] = useState(false);
   
-  const { messages, isConnected, sendMessage } = useWebSocket(projectId);
+  const { messages, isConnected, sendMessage, setMessages } = useWebSocket(projectId);
   const chatEndRef = useRef(null);
 
   useEffect(() => {
@@ -81,15 +81,15 @@ const AgentWorkspacePage = () => {
       <div className="w-1/3 flex flex-col gap-4">
         
         {/* Controls */}
-        <div className="glass-panel p-4 rounded-xl border border-slate-700/50 shrink-0">
+        <div className="glass-panel p-4 rounded-xl shrink-0">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-white flex items-center gap-2">
-              <Bot size={18} className="text-violet-400" />
+              <Bot size={18} style={{ color: 'var(--accent-violet-light)' }} />
               Agent Command
             </h3>
             <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-red-500'}`} />
-              <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">
+              <span className={isConnected ? 'status-dot-online' : 'status-dot-error'} />
+              <span className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
                 {isConnected ? 'Connected' : 'Offline'}
               </span>
             </div>
@@ -101,12 +101,14 @@ const AgentWorkspacePage = () => {
               onChange={(e) => setSelectedAgent(e.target.value)}
               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-violet-500"
             >
-              <option value="workflow">▶ Full Auto Workflow (Planner → Deploy)</option>
+              <option value="workflow">▶ Full Auto Workflow (Planner → Memory)</option>
               <option value="planner">🧠 Planner Agent (Requirements)</option>
               <option value="architect">🏗️ Architect Agent (System Design)</option>
               <option value="frontend">🎨 Frontend Agent (React/UI)</option>
               <option value="backend_dev">⚙️ Backend Agent (Django/API)</option>
               <option value="reviewer">🔍 Reviewer Agent (Code Quality)</option>
+              <option value="testing">🧪 Testing Agent (Test Suites)</option>
+              <option value="documentation">📚 Documentation Agent (Docs)</option>
             </select>
             
             <div className="relative">
@@ -134,17 +136,29 @@ const AgentWorkspacePage = () => {
         </div>
 
         {/* Streaming Feed */}
-        <div className="glass-panel rounded-xl border border-slate-700/50 flex-1 flex flex-col overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-700/50 bg-slate-800/50 flex items-center justify-between">
+        <div className="glass-panel rounded-xl flex-1 flex flex-col overflow-hidden">
+          <div className="px-4 py-3 bg-black/20 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
             <h3 className="font-semibold text-white flex items-center gap-2 text-sm">
               <Terminal size={16} className="text-slate-400" />
               Activity Feed
             </h3>
-            {messages.length > 0 && (
-              <span className="text-xs text-slate-500 animate-pulse flex items-center gap-1">
-                <RefreshCw size={12} className="animate-spin" /> active
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              {messages.length > 0 && (
+                <span className="text-xs animate-pulse flex items-center gap-1" style={{ color: 'var(--accent-violet-light)' }}>
+                  <RefreshCw size={12} className="animate-spin" /> active
+                </span>
+              )}
+              {messages.length > 0 && (
+                <button
+                  onClick={() => setMessages && setMessages([])}
+                  className="text-xs text-slate-500 hover:text-red-400 flex items-center gap-1 transition-colors"
+                  title="Clear feed"
+                >
+                  <Trash2 size={12} />
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.length === 0 ? (
@@ -154,7 +168,7 @@ const AgentWorkspacePage = () => {
               </div>
             ) : (
               messages.map((msg, idx) => (
-                <div key={idx} className="flex gap-3 text-sm animate-in fade-in slide-in-from-bottom-2">
+                <div key={idx} className="flex gap-3 text-sm animate-fade-in">
                   <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 mt-0.5 ${
                     msg.type === 'agent_complete' ? 'bg-emerald-500/20 text-emerald-400' : 
                     msg.type === 'error' ? 'bg-red-500/20 text-red-400' :
@@ -162,12 +176,12 @@ const AgentWorkspacePage = () => {
                   }`}>
                     {msg.type === 'agent_complete' ? <CheckCircle2 size={14} /> : <Bot size={14} />}
                   </div>
-                  <div className="flex-1 space-y-1">
+                  <div className="flex-1 space-y-1 min-w-0">
                     <div className="flex items-baseline gap-2">
                       <span className="font-semibold text-slate-200 capitalize">{msg.agent || 'System'}</span>
                       <span className="text-xs text-slate-500">{msg.type}</span>
                     </div>
-                    <div className="text-slate-300 bg-slate-900/50 p-2.5 rounded-lg border border-slate-700/50 font-mono text-xs whitespace-pre-wrap">
+                    <div className="text-slate-300 bg-black/40 p-2.5 rounded-lg border border-white/5 font-mono text-xs whitespace-pre-wrap break-words code-block">
                       {msg.output || msg.message || msg.content}
                     </div>
                   </div>
@@ -180,8 +194,8 @@ const AgentWorkspacePage = () => {
       </div>
 
       {/* Editor & File Explorer */}
-      <div className="flex-1 flex flex-col glass-panel rounded-xl border border-slate-700/50 overflow-hidden">
-        <div className="h-12 border-b border-slate-700/50 bg-slate-800/50 flex items-center px-2">
+      <div className="flex-1 flex flex-col glass-panel rounded-xl overflow-hidden">
+        <div className="h-12 bg-black/20 flex items-center px-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
           {/* File Tabs */}
           <div className="flex-1 flex items-center overflow-x-auto gap-1 px-2 hide-scrollbar">
             {files.map(f => (
@@ -190,8 +204,8 @@ const AgentWorkspacePage = () => {
                 onClick={() => loadFile(f.path)}
                 className={`px-3 py-1.5 rounded-t-lg text-sm font-medium flex items-center gap-2 border-t border-x border-transparent transition-colors whitespace-nowrap ${
                   activeFile === f.path 
-                    ? 'bg-[#1e1e1e] text-violet-400 border-slate-700/50 border-b-transparent' 
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/30'
+                    ? 'bg-[#1e1e1e] text-violet-400 border-white/10 border-b-transparent' 
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
                 }`}
               >
                 <Code2 size={14} />
@@ -205,7 +219,7 @@ const AgentWorkspacePage = () => {
           
           <button 
             onClick={fetchFiles}
-            className="p-1.5 text-slate-400 hover:text-white rounded transition-colors ml-2"
+            className="p-1.5 text-slate-400 hover:text-white rounded transition-colors ml-2 hover:bg-white/5"
             title="Refresh Files"
           >
             <RefreshCw size={14} />

@@ -154,7 +154,14 @@ OPENROUTER_BASE_URL = env('OPENROUTER_BASE_URL', default='https://openrouter.ai/
 LLM_DEFAULT_MODEL = env('LLM_DEFAULT_MODEL', default='openai/gpt-4o-mini')
 LLM_PREMIUM_MODEL = env('LLM_PREMIUM_MODEL', default='anthropic/claude-3.5-sonnet')
 LLM_FAST_MODEL = env('LLM_FAST_MODEL', default='meta-llama/llama-3.1-8b-instruct:free')
-EMBEDDING_MODEL = env('EMBEDDING_MODEL', default='openai/text-embedding-3-small')
+
+# ─── Embeddings ────────────────────────────────────────────────
+# OpenRouter does NOT support the /embeddings endpoint.
+# Use a real OpenAI key for cloud embeddings, or set EMBEDDING_PROVIDER=local
+# to use the bundled sentence-transformers model (no API key required).
+OPENAI_API_KEY = env('OPENAI_API_KEY', default='')
+EMBEDDING_MODEL = env('EMBEDDING_MODEL', default='text-embedding-3-small')
+EMBEDDING_PROVIDER = env('EMBEDDING_PROVIDER', default='local')  # 'local' | 'openai'
 
 # ─── MCP ──────────────────────────────────────────────────────
 MCP_FILESYSTEM_ROOT = env('MCP_FILESYSTEM_ROOT', default='/projects')
